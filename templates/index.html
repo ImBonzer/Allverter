@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Allverter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-slate-100 text-slate-900">
+    <main class="mx-auto flex min-h-screen max-w-2xl items-center px-4">
+      <section class="w-full rounded-2xl bg-white p-8 shadow-lg">
+        <h1 class="text-center text-3xl font-bold">Allverter</h1>
+        <p class="mt-2 text-center text-sm text-slate-600">
+          Drag and drop a file, pick a compatible format, and convert instantly.
+        </p>
+
+        <form id="convert-form" class="mt-6 space-y-4">
+          <label
+            id="dropzone"
+            for="file-input"
+            class="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 p-8 text-center transition hover:border-indigo-400 hover:bg-indigo-50"
+          >
+            <span id="dropzone-text" class="text-slate-600">Drop a file here or click to browse</span>
+          </label>
+          <input id="file-input" type="file" name="file" class="hidden" required />
+
+          <div>
+            <label for="target-format" class="mb-1 block text-sm font-medium">Target format</label>
+            <select
+              id="target-format"
+              name="target_format"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+              disabled
+            >
+              <option value="">Select a file first</option>
+            </select>
+          </div>
+
+          <button
+            id="submit-button"
+            type="submit"
+            class="w-full rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-indigo-300"
+            disabled
+          >
+            Convert
+          </button>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const dropzone = document.getElementById("dropzone");
+      const fileInput = document.getElementById("file-input");
+      const dropzoneText = document.getElementById("dropzone-text");
+      const targetFormat = document.getElementById("target-format");
+      const submitButton = document.getElementById("submit-button");
+      const convertForm = document.getElementById("convert-form");
+
+      const setSelectedFile = async (file) => {
+        if (!file) return;
+
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        fileInput.files = transfer.files;
+        dropzoneText.textContent = `Selected: ${file.name}`;
+        await loadFormats(file);
+      };
+
+      const loadFormats = async (file) => {
+        const data = new FormData();
+        data.append("file", file);
+
+        const response = await fetch("/formats", { method: "POST", body: data });
+        if (!response.ok) {
+          targetFormat.innerHTML = '<option value="">Unsupported file type</option>';
+          targetFormat.disabled = true;
+          submitButton.disabled = true;
+          return;
+        }
+
+        const payload = await response.json();
+        targetFormat.innerHTML = payload.formats
+          .map((format) => `<option value="${format}">.${format}</option>`)
+          .join("");
+
+        targetFormat.disabled = payload.formats.length === 0;
+        submitButton.disabled = payload.formats.length === 0;
+      };
+
+      fileInput.addEventListener("change", async () => {
+        await setSelectedFile(fileInput.files[0]);
+      });
+
+      dropzone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        dropzone.classList.add("border-indigo-500", "bg-indigo-50");
+      });
+
+      dropzone.addEventListener("dragleave", () => {
+        dropzone.classList.remove("border-indigo-500", "bg-indigo-50");
+      });
+
+      dropzone.addEventListener("drop", async (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("border-indigo-500", "bg-indigo-50");
+        await setSelectedFile(event.dataTransfer.files[0]);
+      });
+
+      convertForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!fileInput.files[0] || !targetFormat.value) return;
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+        formData.append("target_format", targetFormat.value);
+
+        const response = await fetch("/convert", { method: "POST", body: formData });
+        if (!response.ok) {
+          alert("Conversion failed. Please try a different format.");
+          return;
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const contentDisposition = response.headers.get("content-disposition") || "";
+        const nameMatch = contentDisposition.match(/filename="([^"]+)"/);
+        const filename = nameMatch ? nameMatch[1] : `converted.${targetFormat.value}`;
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      });
+    </script>
+  </body>
+</html>
