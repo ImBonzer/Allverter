@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: allverter-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: FRONTEND_ORIGINS
+        sync: false
