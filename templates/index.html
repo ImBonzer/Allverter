@@ -78,6 +78,8 @@
     <footer class="mx-auto max-w-7xl border-t border-[#30302e] pt-5 text-xs text-[#77736c]"><span>Files are processed locally.</span></footer>
   </main>
   <script>
+    const localHosts = ['localhost', '127.0.0.1'];
+    const API_URL = localHosts.includes(window.location.hostname) ? '' : 'https://allverter-api-j6lv.onrender.com';
     const input = document.querySelector('#file-input');
     const dropzone = document.querySelector('#dropzone');
     const options = document.querySelector('#options');
@@ -141,7 +143,7 @@
       }
       status.textContent = translations[language].checking;
       try {
-        const formatResponses = await Promise.all(files.map(file => fetch(`/api/formats?filename=${encodeURIComponent(file.name)}`).then(response => response.json())));
+        const formatResponses = await Promise.all(files.map(file => fetch(`${API_URL}/api/formats?filename=${encodeURIComponent(file.name)}`).then(response => response.json())));
         const targets = formatResponses.slice(1).reduce((common, data) => common.filter(target => data.targets.includes(target)), formatResponses[0]?.targets || []);
         selectedTarget = targets[0] || '';
         formatOptions.innerHTML = targets.map((target, index) => `<button type="button" class="format-button rounded-lg border border-[#b9cbb7] bg-white px-3 py-2 text-sm font-bold text-[#526b5c] transition hover:border-[#e75c35] hover:text-[#c94824] ${index === 0 ? 'selected' : ''}" data-format="${target}" role="radio" aria-checked="${index === 0}"><span class="format-icon" aria-hidden="true">${target.toUpperCase()}</span><span>.${target.toUpperCase()}</span></button>`).join('');
@@ -178,7 +180,7 @@
         selectedFiles.forEach(file => body.append(fieldName, file));
         body.append('target_format', selectedTarget);
         status.textContent = selectedFiles.length === 1 ? 'Converting your file...' : `Converting ${selectedFiles.length} files into a ZIP...`;
-        const response = await fetch(endpoint, { method: 'POST', body });
+        const response = await fetch(`${API_URL}${endpoint}`, { method: 'POST', body });
         if (!response.ok) {
           const error = await response.json().catch(() => ({}));
           throw new Error(error.detail || 'Conversion failed.');
