@@ -21,7 +21,8 @@
 
     function applyLanguage() {
       document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = translations[language][element.dataset.i18n]; });
-      languageToggle.textContent = language === 'en' ? 'ES' : 'EN';
+      languageToggle.innerHTML = `<span aria-hidden="true">${language === 'en' ? '🇪🇸' : '🇺🇸'}</span>`;
+      languageToggle.title = language === 'en' ? 'Cambiar a español' : 'Switch to English';
       document.documentElement.lang = language;
     }
     languageToggle.addEventListener('click', () => { language = language === 'en' ? 'es' : 'en'; localStorage.setItem('allverter-language', language); applyLanguage(); });
