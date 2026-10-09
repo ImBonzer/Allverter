@@ -16,6 +16,8 @@ from core.converter import ConversionError, convert_file, get_supported_targets
 from core.media_converter import MediaConversionError, convert_media, ffmpeg_available, get_supported_media_targets
 
 BASE_DIR = Path(__file__).resolve().parent
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+MAX_BATCH_BYTES = 500 * 1024 * 1024
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 app = FastAPI(title="Allverter", description="A universal file conversion starter app")
@@ -34,9 +36,28 @@ app.add_middleware(
 )
 
 
-def _cleanup_conversion(temp_dir: Path, result_path: str) -> None:
+class UploadTooLargeError(Exception):
+    """Raised when an uploaded file exceeds the configured size limit."""
+
+
+async def _store_upload(upload: UploadFile, destination: Path) -> int:
+    """Stream an upload to disk while enforcing the per-file limit."""
+    size = 0
+    with destination.open("wb") as output:
+        while chunk := await upload.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_BYTES:
+                destination.unlink(missing_ok=True)
+                raise UploadTooLargeError("Each file must be smaller than 100 MB.")
+            output.write(chunk)
+    return size
+
+
+def _cleanup_conversion(temp_dir: Path, result_paths: str | list[str]) -> None:
     """Remove the per-request upload directory and converted output."""
-    Path(result_path).unlink(missing_ok=True)
+    paths = [result_paths] if isinstance(result_paths, str) else result_paths
+    for result_path in paths:
+        Path(result_path).unlink(missing_ok=True)
     rmtree(temp_dir, ignore_errors=True)
 
 
@@ -75,7 +96,7 @@ async def convert(upload: UploadFile = File(...), target_format: str = Form(""))
     temp_dir = Path(mkdtemp(prefix="allverter-"))
     try:
         source = temp_dir / Path(upload.filename).name
-        source.write_bytes(await upload.read())
+        await _store_upload(upload, source)
         result = convert_file(source, target_format)
         return FileResponse(
             result.path,
@@ -87,6 +108,9 @@ async def convert(upload: UploadFile = File(...), target_format: str = Form(""))
     except ConversionError as error:
         rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except UploadTooLargeError as error:
+        rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=413, detail=str(error)) from error
 
 
 @app.post("/api/media/convert")
@@ -100,7 +124,7 @@ async def convert_media_file(upload: UploadFile = File(...), target_format: str 
     temp_dir = Path(mkdtemp(prefix="allverter-media-"))
     try:
         source = temp_dir / Path(upload.filename).name
-        source.write_bytes(await upload.read())
+        await _store_upload(upload, source)
         result_path, result_filename, mime_type = convert_media(source, target_format)
         return FileResponse(
             result_path,
@@ -112,6 +136,9 @@ async def convert_media_file(upload: UploadFile = File(...), target_format: str 
     except MediaConversionError as error:
         rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=503 if not ffmpeg_available() else 400, detail=str(error)) from error
+    except UploadTooLargeError as error:
+        rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=413, detail=str(error)) from error
 
 
 @app.post("/api/batch-convert")
@@ -127,14 +154,19 @@ async def batch_convert(
 
     temp_dir = Path(mkdtemp(prefix="allverter-batch-"))
     archive_path = temp_dir / "allverter-results.zip"
+    result_paths: list[str] = []
+    total_size = 0
     try:
         results = []
         for index, upload in enumerate(uploads, start=1):
             if not upload.filename:
                 raise ConversionError("One of the selected files has no filename.")
             source = temp_dir / f"source-{index}{Path(upload.filename).suffix.lower()}"
-            source.write_bytes(await upload.read())
+            total_size += await _store_upload(upload, source)
+            if total_size > MAX_BATCH_BYTES:
+                raise UploadTooLargeError("The total upload size must be smaller than 500 MB.")
             results.append(convert_file(source, target_format))
+            result_paths.append(results[-1].path)
 
         with ZipFile(archive_path, "w", ZIP_DEFLATED) as archive:
             for index, result in enumerate(results, start=1):
@@ -145,8 +177,11 @@ async def batch_convert(
             media_type="application/zip",
             filename="allverter-results.zip",
             headers={"X-Content-Type-Options": "nosniff"},
-            background=BackgroundTask(_cleanup_conversion, temp_dir, archive_path),
+            background=BackgroundTask(_cleanup_conversion, temp_dir, [archive_path.as_posix(), *result_paths]),
         )
     except ConversionError as error:
-        rmtree(temp_dir, ignore_errors=True)
+        _cleanup_conversion(temp_dir, result_paths)
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except UploadTooLargeError as error:
+        _cleanup_conversion(temp_dir, result_paths)
+        raise HTTPException(status_code=413, detail=str(error)) from error

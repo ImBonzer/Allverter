@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable
 
 from PIL import Image, UnidentifiedImageError
 
@@ -20,8 +19,6 @@ class ConversionResult:
     filename: str
     mime_type: str
 
-
-ImageConverter = Callable[[Path, Path], None]
 
 IMAGE_FORMATS: dict[str, tuple[str, str]] = {
     "jpg": ("JPEG", "image/jpeg"),
@@ -49,7 +46,7 @@ IMAGE_FORMATS: dict[str, tuple[str, str]] = {
 READABLE_FORMATS = set(IMAGE_FORMATS) - {"pdf"}
 
 
-def _convert_image(source: Path, destination: Path, target_format: str, quality: int) -> None:
+def _convert_image(source: Path, destination: Path, target_format: str) -> None:
     """Convert an image with Pillow, handling transparency for JPEG output."""
     image_format, _ = IMAGE_FORMATS[target_format]
     try:
@@ -61,8 +58,7 @@ def _convert_image(source: Path, destination: Path, target_format: str, quality:
                 image = background
             elif image_format in ("JPEG", "PDF") and image.mode not in ("1", "L", "RGB"):
                 image = image.convert("RGB")
-            save_options = {"quality": quality} if image_format in ("JPEG", "WEBP", "AVIF", "JPEG2000") else {}
-            image.save(destination, format=image_format, **save_options)
+            image.save(destination, format=image_format)
     except (UnidentifiedImageError, OSError) as error:
         raise ConversionError("That file is not a readable image.") from error
 
@@ -75,7 +71,7 @@ def get_supported_targets(filename: str) -> list[str]:
     return []
 
 
-def convert_file(source: Path, target_format: str, quality: int = 85) -> ConversionResult:
+def convert_file(source: Path, target_format: str) -> ConversionResult:
     """Route a source file to its registered converter.
 
     Add document, audio, or video routes here as new converters become available.
@@ -84,7 +80,6 @@ def convert_file(source: Path, target_format: str, quality: int = 85) -> Convers
     """
     source_format = source.suffix.lower().lstrip(".")
     target_format = target_format.lower().lstrip(".")
-    quality = max(1, min(100, quality))
     if source_format not in READABLE_FORMATS or target_format not in IMAGE_FORMATS:
         raise ConversionError("This file type is not supported yet. Try a PNG, JPG, WEBP, BMP, TIFF, or GIF image.")
     if target_format == source_format:
@@ -95,7 +90,7 @@ def convert_file(source: Path, target_format: str, quality: int = 85) -> Convers
     output.close()
     destination = Path(output.name)
     try:
-        _convert_image(source, destination, target_format, quality)
+        _convert_image(source, destination, target_format)
     except ConversionError:
         destination.unlink(missing_ok=True)
         raise
