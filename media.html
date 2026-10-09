@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -8,19 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root { color-scheme: dark; --ink: #f5f1e8; --muted: #aaa59b; --panel: #151515; --line: #30302e; --accent: #ff7043; --accent-soft: #2b1b16; }
-    * { box-sizing: border-box; }
-    body { background: #0c0c0c; color: var(--ink); font-family: 'DM Sans', sans-serif; }
-    .media-grid { background: radial-gradient(circle at 18% 20%, rgba(255, 112, 67, .11), transparent 24rem), linear-gradient(135deg, #0c0c0c, #111312 55%, #0c0c0c); }
-    .dropzone { transition: border-color .2s, background .2s, transform .2s, box-shadow .2s; }
-    .dropzone.dragging { border-color: var(--accent); background: var(--accent-soft); transform: translateY(-3px); box-shadow: 0 18px 50px rgba(255, 112, 67, .1); }
-    .dropzone:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(255, 112, 67, .18); }
-    .media-format { transition: border-color .2s, background .2s; }
-    .rise-in { animation: rise-in .65s cubic-bezier(.2,.8,.2,1) both; }
-    @keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-  </style>
+  <link rel="stylesheet" href="./static/css/styles.css">
 </head>
 <body class="media-grid min-h-screen px-5 py-6 sm:px-8 lg:px-14">
   <main class="mx-auto max-w-7xl">
@@ -50,41 +38,6 @@
     </section>
     <footer class="border-t border-[#30302e] pt-5 text-xs text-[#77736c]"><span>Files are processed locally.</span></footer>
   </main>
-  <script>
-    const localHosts = ['localhost', '127.0.0.1'];
-    const API_URL = localHosts.includes(window.location.hostname) ? '' : 'https://allverter-api-j6lv.onrender.com';
-    const input = document.querySelector('#file-input');
-    const dropzone = document.querySelector('#dropzone');
-    const target = document.querySelector('#target');
-    const options = document.querySelector('#options');
-    const status = document.querySelector('#status');
-    let selectedFile;
-    const languageToggle = document.querySelector('#language-toggle');
-    const translations = { en: { imageLink: 'Image studio', convert: 'Convert', media: 'media.', mediaIntro: 'Choose an audio or video file, pick a format, and download the result.', bringMedia: 'Bring a file in.', dropMedia: 'Drop audio or video here, or', browse: 'browse your device', mediaFormats: 'MP3, WAV, MP4, WEBM, MOV, and more', outputFormat: 'Output format', choose: 'Choose a media file to begin.', checking: 'Checking compatible formats...', ready: 'Ready to convert.', unsupported: 'Unsupported media format.', ffmpeg: 'FFmpeg is not installed. Install it and add it to PATH to enable media conversion.' }, es: { imageLink: 'Estudio de imágenes', convert: 'Convertir', media: 'medios.', mediaIntro: 'Elige un archivo de audio o video, selecciona un formato y descarga el resultado.', bringMedia: 'Añade un archivo.', dropMedia: 'Arrastra audio o video aquí, o', browse: 'explora tu dispositivo', mediaFormats: 'MP3, WAV, MP4, WEBM, MOV y más', outputFormat: 'Formato de salida', choose: 'Elige un archivo multimedia para comenzar.', checking: 'Comprobando formatos compatibles...', ready: 'Listo para convertir.', unsupported: 'Formato multimedia no compatible.', ffmpeg: 'FFmpeg no está instalado. Instálalo y añádelo al PATH para activar la conversión multimedia.' } };
-    let language = localStorage.getItem('allverter-language') || 'en';
-    function applyLanguage() { document.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = translations[language][element.dataset.i18n]; }); languageToggle.textContent = language === 'en' ? 'ES' : 'EN'; document.documentElement.lang = language; }
-    languageToggle.addEventListener('click', () => { language = language === 'en' ? 'es' : 'en'; localStorage.setItem('allverter-language', language); applyLanguage(); });
-    applyLanguage();
-    document.querySelector('#browse').addEventListener('click', () => input.click());
-    dropzone.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); input.click(); } });
-    input.addEventListener('change', () => input.files[0] && selectFile(input.files[0]));
-    ['dragenter', 'dragover'].forEach(name => dropzone.addEventListener(name, event => { event.preventDefault(); dropzone.classList.add('dragging'); }));
-    ['dragleave', 'drop'].forEach(name => dropzone.addEventListener(name, event => { event.preventDefault(); dropzone.classList.remove('dragging'); }));
-    dropzone.addEventListener('drop', event => event.dataTransfer.files[0] && selectFile(event.dataTransfer.files[0]));
-    async function selectFile(file) {
-      selectedFile = file; document.querySelector('#filename').textContent = file.name; document.querySelector('#filename').classList.remove('hidden'); status.textContent = translations[language].checking;
-      const response = await fetch(`${API_URL}/api/media/formats?filename=${encodeURIComponent(file.name)}`); const data = await response.json();
-      target.innerHTML = data.targets.map(format => `<option value="${format}">.${format.toUpperCase()}</option>`).join('');
-      const ready = data.available && data.targets.length;
-      options.classList.toggle('hidden', !ready);
-      options.classList.toggle('flex', Boolean(ready));
-      status.textContent = !data.available ? translations[language].ffmpeg : data.targets.length ? translations[language].ready : translations[language].unsupported;
-    }
-    document.querySelector('#media-form').addEventListener('submit', async event => {
-      event.preventDefault(); if (!selectedFile || !target.value) return; status.textContent = 'Converting...';
-      const body = new FormData(); body.append('upload', selectedFile); body.append('target_format', target.value);
-      try { const response = await fetch(`${API_URL}/api/media/convert`, { method: 'POST', body }); if (!response.ok) { const error = await response.json(); throw new Error(error.detail); } const blob = await response.blob(); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = response.headers.get('content-disposition')?.split('filename=')[1]?.replaceAll('"', '') || `converted.${target.value}`; link.click(); URL.revokeObjectURL(link.href); status.textContent = 'Done. Your download should start automatically.'; } catch (error) { status.textContent = error.message || 'Conversion failed.'; }
-    });
-  </script>
+  <script src="./static/js/media.js"></script>
 </body>
 </html>

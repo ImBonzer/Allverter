@@ -8,6 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.background import BackgroundTask
@@ -21,6 +22,7 @@ MAX_BATCH_BYTES = 500 * 1024 * 1024
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 app = FastAPI(title="Allverter", description="A universal file conversion starter app")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 allowed_origins = [
     origin.strip()
